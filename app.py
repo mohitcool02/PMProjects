@@ -3,7 +3,7 @@ from openai import OpenAI
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-st.title("AI PRD Generator")
+st.title("PM PRD Generator")
 
 feature = st.text_input("Feature Name")
 user = st.text_input("Target User")

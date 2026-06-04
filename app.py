@@ -17,7 +17,7 @@ with st.form("prd_form"):
     target_user  = st.text_input("Target User",  placeholder="e.g. B2B SaaS power users")
     problem      = st.text_area("Problem Statement", height=120,
                                 placeholder="Describe the core problem this feature solves…")
-    priority     = st.selectbox("Scope / Priority", ["MVP", "Phase 2", "Future Vision"])
+    priority     = st.selectbox("Scope / Priority", ["MVP", "Execution", "Future Vision"])
 
     col1, col2 = st.columns(2)
     analyze_btn  = col1.form_submit_button("🔍 Analyze Requirements")

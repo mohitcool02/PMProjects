@@ -1,128 +1,145 @@
 import streamlit as st
 from openai import OpenAI
 
+# ── Page config ──────────────────────────────────────────────────────────────
+st.set_page_config(page_title="PM PRD Generator", page_icon="📋", layout="centered")
+st.title("📋 PM PRD Generator")
+st.caption("Analyze requirements → Generate a production-ready PRD")
+
+# ── Client ───────────────────────────────────────────────────────────────────
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-st.title("PM PRD Generator")
+SYSTEM_PROMPT = "You are a Principal Product Manager at a top-tier technology company."
 
-# Form
+# ── Input form ───────────────────────────────────────────────────────────────
 with st.form("prd_form"):
-
-    feature = st.text_input("Feature Name")
-    target_user = st.text_input("Target User")
-    problem = st.text_area("Problem Statement")
+    feature      = st.text_input("Feature Name", placeholder="e.g. In-app Notification Center")
+    target_user  = st.text_input("Target User",  placeholder="e.g. B2B SaaS power users")
+    problem      = st.text_area("Problem Statement", height=120,
+                                placeholder="Describe the core problem this feature solves…")
+    priority     = st.selectbox("Scope / Priority", ["MVP", "Phase 2", "Future Vision"])
 
     col1, col2 = st.columns(2)
+    analyze_btn  = col1.form_submit_button("🔍 Analyze Requirements")
+    generate_btn = col2.form_submit_button("📄 Generate PRD")
 
-    analyze_btn = col1.form_submit_button("Analyze Requirements")
-    generate_btn = col2.form_submit_button("Generate PRD")
+# ── Input validation helper ───────────────────────────────────────────────────
+def inputs_valid():
+    if not feature.strip() or not target_user.strip() or not problem.strip():
+        st.warning("⚠️ Please fill in Feature Name, Target User, and Problem Statement.")
+        return False
+    return True
 
-# ANALYZE BUTTON
+# ── API call helper ───────────────────────────────────────────────────────────
+def call_openai(prompt: str, model: str = "gpt-4o-mini") -> str | None:
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user",   "content": prompt},
+            ],
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        st.error(f"API error: {e}")
+        return None
+
+# ── ANALYZE ───────────────────────────────────────────────────────────────────
 if analyze_btn:
+    if inputs_valid():
+        prompt = f"""
+Review this product idea and return structured feedback.
 
-    prompt = f"""
-    Review this product idea.
+Feature: {feature}
+Target User: {target_user}
+Problem: {problem}
+Priority / Scope: {priority}
 
-    Feature: {feature}
-    User: {target_user}
-    Problem: {problem}
+Identify:
+1. Missing information that would strengthen the PRD
+2. Key risks (technical, product, adoption)
+3. Edge cases to consider
+4. Clarifying questions the PM should answer before writing requirements
 
-    Identify:
-    1. Missing information
-    2. Risks
-    3. Edge cases
-    4. Clarifying questions
-    """
+Be concise and specific. Avoid generic advice.
+"""
+        with st.spinner("Analyzing requirements…"):
+            analysis = call_openai(prompt, model="gpt-4o-mini")
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a Senior Product Manager."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-    )
+        if analysis:
+            st.session_state["analysis"] = analysis
 
-    analysis = response.choices[0].message.content
-
-    # Save for later use
-    st.session_state["analysis"] = analysis
-
-    st.subheader("Requirement Analysis")
-    st.write(analysis)
-
-
-# Show saved analysis even after reruns
+# Show analysis (persists across reruns, shown once)
 if "analysis" in st.session_state:
-    st.subheader("Latest Analysis")
-    st.write(st.session_state["analysis"])
+    with st.expander("🔍 Requirement Analysis", expanded=True):
+        st.write(st.session_state["analysis"])
 
-
-# GENERATE PRD BUTTON
+# ── GENERATE PRD ──────────────────────────────────────────────────────────────
 if generate_btn:
-  
-    analysis = st.session_state.get("analysis", "")
+    if inputs_valid():
+        # Silently run analysis first if not already done
+        if "analysis" not in st.session_state:
+            analyze_prompt = f"""
+Feature: {feature} | User: {target_user} | Problem: {problem}
+Briefly identify missing info, risks, edge cases, and open questions.
+"""
+            with st.spinner("Running quick analysis before generating PRD…"):
+                analysis = call_openai(analyze_prompt, model="gpt-4o-mini")
+            if analysis:
+                st.session_state["analysis"] = analysis
 
-    prompt = f"""
- 
-You are a Principal Product Manager at a top technology company.
+        analysis = st.session_state.get("analysis", "None available.")
 
-Generate a professional Product Requirements Document (PRD).
+        prompt = f"""
+Generate a professional, detailed Product Requirements Document (PRD).
 
 Instructions:
-- Think like an experienced PM.
-- Be specific and actionable.
-- Avoid generic statements.
-- Identify gaps and assumptions.
-- Include realistic requirements.
-- Use markdown formatting.
+- Be specific and actionable — no generic filler.
+- Each section must have 3–5 bullet points minimum.
+- Functional Requirements must include clear acceptance criteria.
+- Flag assumptions explicitly.
+- Use clean markdown formatting.
 
-    Feature: {feature}
-    User: {target_user}
-    Problem: {problem}
+Inputs:
+Feature: {feature}
+Target User: {target_user}
+Problem: {problem}
+Priority / Scope: {priority}
+Requirement Analysis: {analysis}
 
-    Requirement Analysis:
-    {analysis}
+Structure the PRD with exactly these sections:
+# Executive Summary
+# Problem Statement
+# Goals & Success Metrics
+# User Stories
+# Functional Requirements (with acceptance criteria)
+# Non-Functional Requirements
+# Out of Scope
+# Risks & Mitigations
+# Assumptions
+# Open Questions
+"""
+        with st.spinner("Generating PRD… this may take 15–20 seconds"):
+            prd = call_openai(prompt, model="gpt-4o")
 
-    Include:
+        if prd:
+            st.session_state["prd"] = prd
 
-    # Executive Summary
-    # Problem Statement
-    # User Stories
-    # Functional Requirements
-    # Risks
-    # Scope
-    # Assumptions
-    # Open Questions
-    """
+# Show PRD (persists across reruns)
+if "prd" in st.session_state:
+    st.divider()
+    st.subheader("📄 Generated PRD")
+    st.markdown(st.session_state["prd"])
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a Principal Product Manager."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
+    col_a, col_b = st.columns(2)
+    col_a.download_button(
+        label="⬇️ Download as Markdown",
+        data=st.session_state["prd"],
+        file_name=f"PRD_{feature.replace(' ', '_')}.md",
+        mime="text/markdown",
     )
-
-    prd = response.choices[0].message.content
-
-    st.subheader("Generated PRD")
-    st.markdown(prd)
-
-    st.download_button(
-        "Download PRD",
-        prd,
-        file_name="prd.md",
-        mime="text/markdown"
-    )
+    if col_b.button("🔄 Reset & Start Over"):
+        for key in ["analysis", "prd"]:
+            st.session_state.pop(key, None)
+        st.rerun()

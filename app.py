@@ -66,9 +66,7 @@ if "analysis" in st.session_state:
 # GENERATE PRD BUTTON
 if generate_btn:
 
-    analysis = st.session_state.get("analysis", "")
-
-    prompt = f"""
+ 
 You are a Principal Product Manager at a top technology company.
 
 Generate a professional Product Requirements Document (PRD).
